@@ -1,0 +1,119 @@
+---
+title: "Assignment3"
+author: "Peter Omasta"
+date: "3/9/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#attach packages as always
+
+library(tidyverse)
+library(here)
+library(janitor)
+library(lubridate)
+library(naniar)
+library(VIM)
+library(skimr)
+library(ggfortify)
+library(NbClust)
+library(cluster)
+library(factoextra)
+library(dendextend)
+library(ggdendro)
+
+```
+
+```{r}
+#read in data files necessary
+
+sbc_lter <- read_csv(here::here("data","sbc_lter_registered_stream_chemistry.csv")) %>% 
+  janitor::clean_names() %>% 
+  na_if(-999.0) 
+
+#tidy the data
+
+sbc_lter_clean <- sbc_lter %>% 
+  mutate(datetime = lubridate::parse_date_time(timestamp_local, "ymd_hms")) %>% 
+  mutate(month = month(datetime, label = TRUE)) %>% 
+  mutate(year = year(datetime))
+
+```
+
+```{r,include = false}
+#start with the linear model. let us see if the year, site, and month are correlated with output of total dissolved N 
+
+lm_df <- sbc_lter_clean %>% 
+  select(month, year, site_code, tdn_u_m) %>% 
+  group_by(year, month, site_code) %>% 
+  summarise(
+    average = mean(tdn_u_m)
+  ) 
+
+n_lm <- lm(average ~ month + year + site_code, data = lm_df)
+summary(n_lm)
+plot(n_lm)
+
+```
+
+```{r}
+#pca analysis 
+
+pca_df <- sbc_lter_clean %>% 
+  drop_na() %>% 
+  select(-timestamp_local, 
+         -datetime,
+         -site_code,
+         -month,
+         -year)
+
+sbc_pca <- prcomp(pca_df, scale = TRUE)
+my_biplot <- autoplot(sbc_pca, 
+                      colour = NA,
+                      loadings.label = TRUE,
+                      loadings.label.size = 3,
+                      loadings.label.colour = "black",
+                      loadings.label.repel = TRUE) +
+  theme_minimal()
+my_biplot
+```
+
+```{r, include = FALSE}
+#kmeans clustering
+kmean_df <- sbc_lter_clean %>% 
+  select(tdn_u_m, tdp_u_m, site_code, year, month) %>% 
+  filter(year %in% c(2009:2018))
+
+kmean_sum <- kmean_df %>% 
+  group_by(year, month, site_code) %>% 
+  summarise(
+    tdnavg = mean(tdn_u_m),
+    tdpavg = mean(tdp_u_m)
+  ) %>% 
+  drop_na()
+
+ggplot(kmean_sum) +
+  geom_point(aes(x = tdnavg, y = tdpavg, color = site_code))
+```
+
+```{r, include = FALSE}
+number_est <- NbClust(kmean_sum[4:5], 
+                      min.nc = 3,
+                      max.nc = 10,
+                      method = "kmeans")
+
+sbc_kmeans <- kmeans(kmean_sum[4:5], 3)
+
+sbc_cl <- data.frame(kmean_sum, cluster_no = factor(sbc_kmeans$cluster))
+
+```
+
+```{r}
+ggplot(sbc_cl) +
+  geom_point(aes(x = tdnavg,
+                 y = tdpavg,
+                 color = cluster_no)) +
+  scale_color_brewer(palette = "Set1")
+```
+
