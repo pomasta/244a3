@@ -6,7 +6,9 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE,
+                      warning = FALSE,
+                      message = FALSE)
 #attach packages as always
 
 library(tidyverse)
@@ -22,6 +24,9 @@ library(cluster)
 library(factoextra)
 library(dendextend)
 library(ggdendro)
+library(gt)
+library(devtools)
+library(stargazer)
 
 ```
 
@@ -35,13 +40,14 @@ sbc_lter <- read_csv(here::here("data","sbc_lter_registered_stream_chemistry.csv
 #tidy the data
 
 sbc_lter_clean <- sbc_lter %>% 
-  mutate(datetime = lubridate::parse_date_time(timestamp_local, "ymd_hms")) %>% 
-  mutate(month = month(datetime, label = TRUE)) %>% 
+  mutate(datetime = lubridate::parse_date_time(timestamp_local, "ymd_HMS")) %>% 
+  mutate(month = month(datetime)) %>% 
   mutate(year = year(datetime))
 
 ```
 
-```{r,include = false}
+
+```{r}
 #start with the linear model. let us see if the year, site, and month are correlated with output of total dissolved N 
 
 lm_df <- sbc_lter_clean %>% 
@@ -49,13 +55,20 @@ lm_df <- sbc_lter_clean %>%
   group_by(year, month, site_code) %>% 
   summarise(
     average = mean(tdn_u_m)
-  ) 
+  ) %>% 
+  filter(year %in% c(2009:2018))
 
 n_lm <- lm(average ~ month + year + site_code, data = lm_df)
-summary(n_lm)
-plot(n_lm)
+#summary(n_lm)
+#(n_lm)
+
 
 ```
+
+```{r, results = "asis"}
+stargazer(n_lm, type = "html")
+```
+
 
 ```{r}
 #pca analysis 
@@ -116,4 +129,5 @@ ggplot(sbc_cl) +
                  color = cluster_no)) +
   scale_color_brewer(palette = "Set1")
 ```
+
 

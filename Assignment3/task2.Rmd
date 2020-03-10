@@ -1,0 +1,113 @@
+---
+title: "task2"
+author: "Peter Omasta"
+date: "3/9/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,
+                      warning = FALSE,
+                      message = FALSE)
+
+library(tidyverse)
+library(here)
+library(pdftools)
+library(tidytext)
+library(textdata) 
+library(ggwordcloud)
+
+```
+
+```{r}
+twotowers <- here("data","lordofrings21tolk.pdf")
+twotowers_text <- pdf_text(twotowers)
+```
+
+```{r}
+tt_df <- data.frame(twotowers_text) %>% 
+  mutate(text_full = str_split(twotowers_text, pattern = '\\n')) %>% 
+  unnest(text_full) %>% 
+  mutate(text_full = str_trim(text_full))
+
+tt_tolkeins <- tt_df %>% 
+  unnest_tokens(word, text_full)
+
+tt_wc <- tt_tolkeins %>% 
+  count(word) %>% 
+  arrange(-n)
+
+tt_stop <- tt_tolkeins %>% 
+  anti_join(stop_words) %>% 
+  select(-twotowers_text)
+
+tt_swc <- tt_stop %>% 
+  count(word) %>% 
+  arrange(-n)
+
+tt_no_numeric <- tt_stop %>% 
+  filter(is.na(as.numeric(word)))
+```
+
+```{r}
+#create a word cloud 
+
+length(unique(tt_no_numeric$word))
+
+tt_top100 <- tt_no_numeric %>% 
+  count(word) %>% 
+  arrange(-n) %>% 
+  head(100)
+       
+tt_cloud <- ggplot(data = tt_top100, aes(label=word)) +
+  geom_text_wordcloud(aes(color = n), 
+                      shape = "triangle-forward") +
+  scale_size_area(max_size = 20) +
+  scale_color_gradientn(colors = c("dodgerblue4","grey37","orchid4")) +
+  theme_minimal()
+
+tt_cloud     
+```
+
+### Lexicon analysis
+
+```{r}
+get_sentiments(lexicon = "afinn")
+get_sentiments(lexicon = "nrc")
+
+tt_afinn <- tt_stop %>% 
+  inner_join(get_sentiments("afinn")) %>% 
+  head(20)
+
+tt_nrc <- tt_stop %>% 
+  inner_join(get_sentiments("nrc")) %>% 
+  head(20)
+
+tt_afinn_hist <- tt_afinn %>% 
+  count(value)
+
+tt_nrc_n <- tt_nrc %>% 
+  count(sentiment, sort=TRUE)
+
+afinnplot <- ggplot(data = tt_afinn,
+       aes(x = word, y =n)) +
+  geom_col() +
+  theme_minimal() +
+  labs(x = "Word",
+       y = "Number of Times it Appears",
+       title = "Most Used Words in the Two Towers")
+
+nrcplot <- ggplot(data = tt_nrc_n, 
+                  aes(x = reorder(word,n),
+                      y = n,
+                      fill = sentiment)) +
+  geom_col() +
+  theme_minimal() +
+  labs(x = "Word",
+       y = "Number of Times it Appears",
+       title = "Most Used Words in the Two Towers by Sentiment")
+
+nrcplot
+afinnplot
+```
+
